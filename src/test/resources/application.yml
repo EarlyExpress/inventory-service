@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: default-server-test
+
+  # H2 인메모리 데이터베이스 설정
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+
+  # JPA 설정 (테스트용)
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    show-sql: true
+
+  # Kafka 테스트 설정 (EmbeddedKafka 사용)
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      auto-offset-reset: earliest
+      group-id: test-group
+
+  # Cloud Config 비활성화
+  cloud:
+    config:
+      enabled: false
+
+  # Security 테스트용 설정
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/auth/realms/test
+
+# Eureka 비활성화 (테스트용)
+eureka:
+  client:
+    enabled: false
+
+# 테스트 서버 포트
+server:
+  port: 0  # 랜덤 포트 사용
+
+# 로깅 설정
+logging:
+  level:
+    com.early_express: DEBUG
+    org.springframework.security: DEBUG

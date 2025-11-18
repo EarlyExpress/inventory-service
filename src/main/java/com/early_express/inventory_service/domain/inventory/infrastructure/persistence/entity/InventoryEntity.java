@@ -1,5 +1,6 @@
 package com.early_express.inventory_service.domain.inventory.infrastructure.persistence.entity;
 
+import com.early_express.inventory_service.global.common.utils.UuidUtils;
 import com.early_express.inventory_service.global.infrastructure.entity.BaseEntity;
 import com.early_express.inventory_service.domain.inventory.domain.model.Inventory;
 import com.early_express.inventory_service.domain.inventory.domain.model.vo.StockQuantity;
@@ -93,7 +94,7 @@ public class InventoryEntity extends BaseEntity {
     public static InventoryEntity fromDomain(Inventory inventory) {
         String inventoryId = inventory.getInventoryId();
         if (inventoryId == null || inventoryId.isBlank()) {
-            inventoryId = com.early_express.inventory_service.global.common.utils.UuidUtils.generate();
+            inventoryId = UuidUtils.generate();
         }
 
         return InventoryEntity.builder()
@@ -106,7 +107,7 @@ public class InventoryEntity extends BaseEntity {
                 .reorderPoint(inventory.getReorderPoint().getValue())
                 .location(inventory.getLocation())
                 .lastRestockedAt(inventory.getLastRestockedAt())
-                .version(inventory.getVersion())
+//                .version(inventory.getVersion())  //jpa레벨에서 버전을 0으로 넣으면 문제가 발생 -> 머지가 발생.
                 .build();
     }
 
