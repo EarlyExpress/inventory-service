@@ -88,10 +88,16 @@ public class InventoryEntity extends BaseEntity {
 
     /**
      * Domain Model -> Entity 변환 (신규 생성)
+     * ID가 없으면 자동 생성
      */
     public static InventoryEntity fromDomain(Inventory inventory) {
+        String inventoryId = inventory.getInventoryId();
+        if (inventoryId == null || inventoryId.isBlank()) {
+            inventoryId = com.early_express.inventory_service.global.common.utils.UuidUtils.generate();
+        }
+
         return InventoryEntity.builder()
-                .inventoryId(inventory.getInventoryId())
+                .inventoryId(inventoryId)
                 .productId(inventory.getProductId())
                 .hubId(inventory.getHubId())
                 .quantityInHub(inventory.getQuantityInHub().getValue())
