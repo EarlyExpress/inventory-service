@@ -33,6 +33,50 @@ class InventoryEntityTest {
     }
 
     @Test
+    @DisplayName("Domain의 ID가 없으면 자동 생성")
+    void fromDomain_withNullId_autoGenerateId() {
+        // given
+        Inventory inventory = Inventory.create(
+                null,  // ID가 null
+                "PROD-001",
+                "HUB-SEOUL",
+                100,
+                10,
+                "A-1-3"
+        );
+
+        // when
+        InventoryEntity entity = InventoryEntity.fromDomain(inventory);
+
+        // then
+        assertThat(entity.getInventoryId()).isNotNull();
+        assertThat(entity.getInventoryId()).isNotBlank();
+        assertThat(entity.getInventoryId()).hasSize(36); // UUID 표준 길이
+    }
+
+    @Test
+    @DisplayName("Domain의 ID가 빈 문자열이면 자동 생성")
+    void fromDomain_withBlankId_autoGenerateId() {
+        // given
+        Inventory inventory = Inventory.create(
+                "",  // ID가 빈 문자열
+                "PROD-001",
+                "HUB-SEOUL",
+                100,
+                10,
+                "A-1-3"
+        );
+
+        // when
+        InventoryEntity entity = InventoryEntity.fromDomain(inventory);
+
+        // then
+        assertThat(entity.getInventoryId()).isNotNull();
+        assertThat(entity.getInventoryId()).isNotBlank();
+        assertThat(entity.getInventoryId()).hasSize(36); // UUID 표준 길이
+    }
+
+    @Test
     @DisplayName("Entity → Domain 변환")
     void toDomain() {
         // given
