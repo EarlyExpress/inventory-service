@@ -1,0 +1,140 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.7'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.early_express'
+version = '0.0.1-SNAPSHOT'
+description = 'Inventory Service'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+
+ext {
+    set('springCloudVersion', "2025.0.0")
+    set('queryDslVersion', "5.1.0")
+    set('archUnitVersion', "1.3.0")
+}
+
+dependencies {
+    // ===== Spring Boot Core =====
+    // 애플리케이션 모니터링 및 헬스체크 엔드포인트 제공
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // 웹 애플리케이션 개발을 위한 스타터
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    // WebClient를 위한 WebFlux (반응형 웹 클라이언트)
+    implementation 'org.springframework:spring-webflux'
+    // ===== Security =====
+    // Spring Security 기본
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // OAuth 2.0 클라이언트
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    // OAuth 2.0 리소스 서버
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+
+    // ===== Spring Cloud - MSA 기본 구성 =====
+    // 외부 설정 서버로부터 설정 정보를 가져옴
+    implementation 'org.springframework.cloud:spring-cloud-starter-config'
+    // Eureka 서비스 디스커버리 클라이언트
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    // 클라이언트 사이드 로드밸런싱
+    implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
+    // 선언적 REST 클라이언트
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+    // ===== Message Queue - Kafka =====
+    // Kafka 메시징 지원
+    implementation 'org.springframework.kafka:spring-kafka'
+    // Spring Cloud Stream과 Kafka 바인더
+    implementation 'org.springframework.cloud:spring-cloud-starter-stream-kafka'
+    // Kafka Streams 지원 (필요시 사용)
+    implementation 'org.apache.kafka:kafka-streams'
+
+    // ===== Observability =====
+    // 분산 추적을 위한 Brave 트레이싱 브릿지
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    // Zipkin으로 트레이스 데이터 전송
+    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+    // Loki로 로그 전송을 위한 Logback 어펜더
+    implementation 'com.github.loki4j:loki-logback-appender:2.0.0'
+    // Prometheus 메트릭 수집
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    // ===== Database =====
+    // JPA ORM 지원
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // PostgreSQL JDBC 드라이버
+    runtimeOnly 'org.postgresql:postgresql'
+    // PostgreSQL Vector 확장 지원 (pgvector)
+    implementation 'com.pgvector:pgvector:0.1.6'
+
+    // ===== QueryDSL =====
+    // 타입 세이프한 쿼리 작성을 위한 QueryDSL
+    implementation "com.querydsl:querydsl-jpa:${queryDslVersion}:jakarta"
+    annotationProcessor "com.querydsl:querydsl-apt:${queryDslVersion}:jakarta"
+    annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+    annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+
+    // ===== Testing =====
+    // 아키텍처 테스트를 위한 ArchUnit
+    testImplementation "com.tngtech.archunit:archunit-junit5:${archUnitVersion}"
+    // Spring Boot 테스트 스타터
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Spring Security 테스트
+    testImplementation 'org.springframework.security:spring-security-test'
+    // Kafka 테스트 지원
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    // H2 인메모리 데이터베이스 (테스트용)
+    testImplementation 'com.h2database:h2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // ===== Utilities =====
+    // Lombok - 보일러플레이트 코드 자동 생성
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    // 개발 시 자동 재시작 지원
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    runtimeOnly 'com.h2database:h2'
+
+    // ===== Environment Variables =====
+    // .env 파일에서 환경변수 로드
+    implementation 'io.github.cdimascio:dotenv-java:3.1.0'
+
+    // ===== API Documentation =====
+    // Swagger/OpenAPI 문서 자동 생성
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// QueryDSL Q클래스 생성 경로 설정
+def querydslDir = "$buildDir/generated/querydsl"
+
+sourceSets {
+    main.java.srcDir querydslDir
+}
+
+configurations {
+    querydsl.extendsFrom compileClasspath
+}
+
+clean {
+    delete file(querydslDir)
+}

@@ -1,0 +1,138 @@
+# ========================================
+# 마이크로서비스 개별 설정
+# Config Server의 공통 설정을 상속받고 서비스별 고유 설정만 정의
+# ========================================
+
+spring:
+  # ===== 서비스 식별 정보 =====
+  application:
+    name: ${APP_NAME:inventory-service}  # 서비스명 (Eureka 등록, 로깅, 메트릭에 사용)
+
+  # ===== 프로파일 설정 =====
+  profiles:
+    active: ${APP_PROFILE:local}  # 활성 프로파일 (local, dev, staging, prod)
+
+  # ===== Config Server 연결 설정 =====
+  # Eureka를 통해 Config Server를 자동으로 찾아 설정을 가져옴
+  config:
+    import: 'optional:configserver:'  # Config Server 설정 import (optional: 없어도 실행 가능)
+  cloud:
+    config:
+      discovery:
+        enabled: true  # Eureka를 통한 Config Server 자동 탐색
+        service-id: config-server  # Config Server의 Eureka 서비스 ID
+      allow-override: true  # 로컬 설정으로 Config Server 설정 오버라이드 허용
+      override-none: true  # Config Server 설정이 없을 때 로컬 설정 사용
+      override-system-properties: false  # 시스템 프로퍼티는 오버라이드하지 않음
+      fail-fast: false  # Config Server 연결 실패시에도 애플리케이션 시작 (개발 환경용)
+      retry:
+        initial-interval: 1000  # 초기 재시도 간격 (1초)
+        max-attempts: 3  # 최대 재시도 횟수
+        max-interval: 2000  # 최대 재시도 간격 (2초)
+        multiplier: 1.1  # 재시도 간격 증가율
+
+  # ===== Kafka 메시징 설정 =====
+  kafka:
+    # Kafka 브로커 클러스터 주소
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092,localhost:9093,localhost:9094}
+
+    # ----- Producer(생산자) 설정 -----
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer  # 키 직렬화
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer  # 값 직렬화 (JSON)
+      acks: all  # 모든 복제본 확인 (최고 신뢰성)
+      retries: 3  # 전송 실패 시 재시도 횟수
+      properties:
+        enable.idempotence: true  # 멱등성 보장 (중복 방지)
+        max.in.flight.requests.per.connection: 5  # 동시 전송 가능한 요청 수
+
+    # ----- Consumer(소비자) 설정 -----
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:${spring.application.name}-group}  # 컨슈머 그룹 ID
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer  # 키 역직렬화
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer  # 값 역직렬화 (JSON)
+      auto-offset-reset: earliest  # 오프셋 리셋 정책 (처음부터 읽기)
+      enable-auto-commit: false  # 수동 커밋 모드 (트랜잭션 보장)
+      properties:
+        spring.json.trusted.packages: "*"  # 모든 패키지 신뢰 (역직렬화 허용)
+        isolation.level: read_committed  # 커밋된 메시지만 읽기 (트랜잭션 지원)
+
+    # ----- Listener 설정 -----
+    listener:
+      ack-mode: manual  # 수동 승인 모드 (메시지 처리 보장)
+      concurrency: 3  # 동시 처리 리스너 수
+
+# ===== 서버 포트 설정 =====
+server:
+  port: ${APP_PORT:4000}  # 서비스 포트 (환경변수로 오버라이드 가능)
+  shutdown: graceful  # 종료 (진행중인 요청 완료 후 종료)
+
+# ===== Eureka Client 설정 =====
+# 서비스 디스커버리를 위한 Eureka 등록 설정
+eureka:
+  instance:
+    prefer-ip-address: false  # hostname 사용 (true: IP 주소 사용)
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:${spring.application.name}}  # 인스턴스 호스트명
+    instance-id: ${eureka.instance.hostname}:${server.port}  # 고유 인스턴스 ID
+    lease-renewal-interval-in-seconds: 10  # 하트비트 전송 간격 (10초)
+    lease-expiration-duration-in-seconds: 30  # 하트비트 만료 시간 (30초)
+    metadata-map:  # 인스턴스 메타데이터
+      zone: ${ENVIRONMENT:local}  # 배포 존 정보
+      version: ${version:0.0.1-SNAPSHOT}  # 서비스 버전
+  client:
+    register-with-eureka: true  # Eureka 서버에 등록
+    fetch-registry: true  # Eureka 레지스트리 정보 가져오기
+    service-url:
+      # Eureka 서버 URL (고가용성을 위해 2개 서버 지정)
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:3150/eureka/,http://localhost:3151/eureka/}
+    registry-fetch-interval-seconds: 5  # 레지스트리 갱신 간격 (5초)
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    # 프록시 환경에서 중요: 상대 경로 사용
+    disable-swagger-default-url: true
+    # OAuth2 리디렉션 URL (프록시 고려)
+    oauth2-redirect-url: /swagger-ui/oauth2-redirect.html
+  # 실제 서버 URL 설정 (프록시 URL)
+  server:
+    url: http://localhost:4000
+
+
+# ========================================
+# 서비스별 커스터마이징이 필요한 설정 예시
+# ========================================
+
+# 예시 1: 특정 서비스만 다른 DB 스키마 사용
+# spring:
+#   jpa:
+#     properties:
+#       hibernate:
+#         default_schema: custom_schema
+
+# 예시 2: 특정 서비스의 Kafka 토픽 커스터마이징
+# spring:
+#   cloud:
+#     stream:
+#       bindings:
+#         input:
+#           destination: custom-topic-name
+#           group: custom-consumer-group
+
+# 예시 3: 특정 서비스의 로깅 레벨 조정
+# logging:
+#   level:
+#     com.earlyexpress.specific.package: TRACE
+
+# 예시 4: 특정 서비스의 Resilience4j 설정 오버라이드
+# resilience4j:
+#   circuitbreaker:
+#     instances:
+#       myService:
+#         baseConfig: default
+#         slidingWindowSize: 10
+#         failureRateThreshold: 60
