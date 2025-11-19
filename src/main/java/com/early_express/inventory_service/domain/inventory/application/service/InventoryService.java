@@ -8,6 +8,7 @@ import com.early_express.inventory_service.domain.inventory.domain.messaging.Inv
 import com.early_express.inventory_service.domain.inventory.domain.model.Inventory;
 import com.early_express.inventory_service.domain.inventory.domain.model.vo.StockQuantity;
 import com.early_express.inventory_service.domain.inventory.domain.repository.InventoryRepository;
+import com.early_express.inventory_service.domain.inventory.infrastructure.messaging.producer.InventoryEventProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -32,8 +33,6 @@ public class InventoryService {
     private final InventoryRepository inventoryRepository;
 
     private final InventoryEventPublisher eventPublisher;
-
-    private final InventoryEventProducer eventProducer;
 
 
     private static final List<String> AVAILABLE_HUBS = Arrays.asList(
