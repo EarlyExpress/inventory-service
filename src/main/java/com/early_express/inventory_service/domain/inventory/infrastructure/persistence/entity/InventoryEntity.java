@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(
-        name = "inventories",
+        name = "p_inventories",
         indexes = {
                 @Index(name = "idx_product_hub", columnList = "product_id, hub_id"),
                 @Index(name = "idx_hub_id", columnList = "hub_id")

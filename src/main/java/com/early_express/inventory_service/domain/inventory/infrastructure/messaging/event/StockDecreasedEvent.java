@@ -8,41 +8,43 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 재고 부족 이벤트
- * - Product 서비스로 전송하여 품절 처리
+ * 재고 차감 이벤트
+ * - 주문 확정 시 재고 차감 알림 (→ Order)
  */
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class InventoryLowStockEvent {
+public class StockDecreasedEvent {
 
     private String eventId;
     private String eventType;
     private String inventoryId;
     private String productId;
     private String hubId;
-    private Integer currentQuantity;
-    private Integer safetyStock;
-    private LocalDateTime detectedAt;
+    private String orderId;
+    private Integer decreasedQuantity;
+    private Integer remainingQuantity;
+    private LocalDateTime decreasedAt;
 
-    public static InventoryLowStockEvent of(
+    public static StockDecreasedEvent of(
             String inventoryId,
             String productId,
             String hubId,
-            Integer currentQuantity,
-            Integer safetyStock
+            String orderId,
+            Integer decreasedQuantity,
+            Integer remainingQuantity
     ) {
-        return InventoryLowStockEvent.builder()
+        return StockDecreasedEvent.builder()
                 .eventId(java.util.UUID.randomUUID().toString())
-                .eventType("INVENTORY_LOW_STOCK")
+                .eventType("STOCK_DECREASED")
                 .inventoryId(inventoryId)
                 .productId(productId)
                 .hubId(hubId)
-                .currentQuantity(currentQuantity)
-                .safetyStock(safetyStock)
-                .detectedAt(LocalDateTime.now())
+                .orderId(orderId)
+                .decreasedQuantity(decreasedQuantity)
+                .remainingQuantity(remainingQuantity)
+                .decreasedAt(LocalDateTime.now())
                 .build();
     }
 }
-
