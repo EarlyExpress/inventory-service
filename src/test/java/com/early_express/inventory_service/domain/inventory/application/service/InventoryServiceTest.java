@@ -150,6 +150,7 @@ class InventoryServiceTest {
             // when
             Inventory result = inventoryService.restock(command);
 
+
             // then
             assertThat(result.getQuantityInHub().getValue()).isEqualTo(expectedQuantity);
             assertThat(result.getLastRestockedAt()).isNotNull();

@@ -30,11 +30,16 @@ import java.util.*;
 public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
+
     private final InventoryEventPublisher eventPublisher;
+
+    private final InventoryEventProducer eventProducer;
+
 
     private static final List<String> AVAILABLE_HUBS = Arrays.asList(
             "HUB-SEOUL", "HUB-BUSAN", "HUB-INCHEON", "HUB-DAEGU"
     );
+
 
     // ==================== 명령(Command) 메서드 ====================
 
@@ -68,10 +73,12 @@ public class InventoryService {
         List<Inventory> createdInventories = new ArrayList<>();
 
         for (String hubId : AVAILABLE_HUBS) {
+
             if (inventoryRepository.existsByProductIdAndHubId(productId, hubId)) {
                 log.info("재고가 이미 존재함: productId={}, hubId={}", productId, hubId);
                 continue;
             }
+
 
             Inventory inventory = Inventory.create(null, productId, hubId, 0, 10, "A-1-1");
             Inventory savedInventory = inventoryRepository.save(inventory);
@@ -95,6 +102,7 @@ public class InventoryService {
         inventories.forEach(inv -> inventoryRepository.delete(inv.getInventoryId()));
 
         log.info("상품 재고 삭제 완료: productId={}, 삭제 개수={}", productId, inventories.size());
+
     }
 
     /**
@@ -374,3 +382,4 @@ public class InventoryService {
         }
     }
 }
+

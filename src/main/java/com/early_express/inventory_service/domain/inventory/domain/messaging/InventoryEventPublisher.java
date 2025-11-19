@@ -37,4 +37,5 @@ public interface InventoryEventPublisher {
      * 재고 복원 이벤트 발행 (→ Order)
      */
     void publishStockRestored(Inventory inventory, String orderId, Integer restoredQuantity);
+
 }

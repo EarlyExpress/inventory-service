@@ -33,7 +33,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.*;
 
 /**
- * 이벤트 플로우 통합 테스트 (개선 버전)
+ * 이벤트 플로우 통합 테스트
  * - Application Layer DTO 사용
  * - Product ↔ Inventory 서비스 간 이벤트 흐름 검증
  */
@@ -96,7 +96,6 @@ class InventoryEventFlowIntegrationTest {
             // then
             List<Inventory> inventories = inventoryRepository.findByProductId(TEST_PRODUCT_ID);
             assertThat(inventories).hasSize(1); // 1개 허브만 생성
-
             Inventory inventory = inventories.get(0);
             assertThat(inventory.getProductId()).isEqualTo(TEST_PRODUCT_ID);
             assertThat(inventory.getHubId()).isEqualTo("HUB-SEOUL");
@@ -448,7 +447,6 @@ class InventoryEventFlowIntegrationTest {
 
             inventoryService.reserveStock(largeReserveCommand);
             inventoryService.confirmShipment(TEST_PRODUCT_ID, "HUB-SEOUL", 45, "ORDER-002");
-
             // LowStockEvent 발행 확인
             verify(kafkaTemplate, atLeastOnce()).send(any(), eq(TEST_PRODUCT_ID), any(InventoryLowStockEvent.class));
         }
