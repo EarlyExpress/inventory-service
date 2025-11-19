@@ -290,14 +290,16 @@ public class Inventory {
      * 안전 재고 이하인지 확인
      */
     public boolean isBelowSafetyStock() {
-        return this.quantityInHub.isLessThanOrEqual(this.safetyStock);
+        StockQuantity available = getAvailableQuantity();
+        return available.isLessThanOrEqual(this.safetyStock);
     }
 
     /**
      * 재주문 시점 도달 여부
      */
     public boolean needsReorder() {
-        return this.quantityInHub.isLessThanOrEqual(this.reorderPoint);
+        StockQuantity available = getAvailableQuantity();
+        return available.isLessThanOrEqual(this.reorderPoint);
     }
 
     /**
