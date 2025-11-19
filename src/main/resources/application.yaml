@@ -19,12 +19,13 @@ spring:
   cloud:
     config:
       discovery:
-        enabled: true  # Eureka를 통한 Config Server 자동 탐색
+        enabled: false  # Eureka를 통한 Config Server 자동 탐색
         service-id: config-server  # Config Server의 Eureka 서비스 ID
       allow-override: true  # 로컬 설정으로 Config Server 설정 오버라이드 허용
       override-none: true  # Config Server 설정이 없을 때 로컬 설정 사용
       override-system-properties: false  # 시스템 프로퍼티는 오버라이드하지 않음
       fail-fast: false  # Config Server 연결 실패시에도 애플리케이션 시작 (개발 환경용)
+      uri: ${CONFIG_SERVER_URL:}
       retry:
         initial-interval: 1000  # 초기 재시도 간격 (1초)
         max-attempts: 3  # 최대 재시도 횟수
