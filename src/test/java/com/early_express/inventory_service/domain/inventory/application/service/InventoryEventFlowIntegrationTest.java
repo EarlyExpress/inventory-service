@@ -77,11 +77,12 @@ class InventoryEventFlowIntegrationTest {
     class ProductCreatedFlowTest {
 
         @Test
-        @DisplayName("ProductCreatedEvent 수신 시 모든 허브에 초기 재고 생성")
-        void productCreated_CreatesInitialInventories() {
+        @DisplayName("ProductCreatedEvent 수신 시 해당 허브에 초기 재고 생성")
+        void productCreated_CreatesInventoryForSpecificHub() {
             // given
             ProductCreatedEvent event = ProductCreatedEvent.builder()
                     .eventId("event-001")
+                    .hubId("HUB-SEOUL")
                     .eventType("PRODUCT_CREATED")
                     .productId(TEST_PRODUCT_ID)
                     .sellerId(TEST_SELLER_ID)
@@ -94,20 +95,22 @@ class InventoryEventFlowIntegrationTest {
 
             // then
             List<Inventory> inventories = inventoryRepository.findByProductId(TEST_PRODUCT_ID);
-            assertThat(inventories).hasSize(4); // 4개 허브
-            assertThat(inventories)
-                    .allMatch(inv -> inv.getProductId().equals(TEST_PRODUCT_ID))
-                    .allMatch(inv -> inv.getQuantityInHub().getValue() == 0) // 초기 수량 0
-                    .allMatch(inv -> inv.getSafetyStock().getValue() == 10); // 기본 안전재고 10
+            assertThat(inventories).hasSize(1); // 1개 허브만 생성
+
+            Inventory inventory = inventories.get(0);
+            assertThat(inventory.getProductId()).isEqualTo(TEST_PRODUCT_ID);
+            assertThat(inventory.getHubId()).isEqualTo("HUB-SEOUL");
+            assertThat(inventory.getQuantityInHub().getValue()).isEqualTo(0); // 초기 수량 0
+            assertThat(inventory.getSafetyStock().getValue()).isEqualTo(10); // 기본 안전재고 10
 
             // InventoryCreatedEvent 발행 확인
-            verify(kafkaTemplate, times(4)).send(any(), eq(TEST_PRODUCT_ID), any(InventoryCreatedEvent.class));
+            verify(kafkaTemplate, times(1)).send(any(), eq(TEST_PRODUCT_ID), any(InventoryCreatedEvent.class));
             verify(acknowledgment).acknowledge();
         }
 
         @Test
         @DisplayName("이미 재고가 존재하는 허브는 건너뛴다")
-        void productCreated_SkipsExistingInventories() {
+        void productCreated_SkipsExistingInventory() {
             // given - 기존 재고 생성
             Inventory existingInventory = Inventory.create(
                     null,
@@ -121,6 +124,7 @@ class InventoryEventFlowIntegrationTest {
 
             ProductCreatedEvent event = ProductCreatedEvent.builder()
                     .eventId("event-002")
+                    .hubId("HUB-SEOUL")
                     .eventType("PRODUCT_CREATED")
                     .productId(TEST_PRODUCT_ID)
                     .sellerId(TEST_SELLER_ID)
@@ -133,20 +137,54 @@ class InventoryEventFlowIntegrationTest {
 
             // then
             List<Inventory> inventories = inventoryRepository.findByProductId(TEST_PRODUCT_ID);
-            assertThat(inventories).hasSize(4); // 기존 1개 + 신규 3개
+            assertThat(inventories).hasSize(1); // 여전히 1개만 존재
 
             // 서울 허브 재고는 기존 수량 유지
-            Inventory seoulInventory = inventories.stream()
-                    .filter(inv -> inv.getHubId().equals("HUB-SEOUL"))
-                    .findFirst()
-                    .orElseThrow();
+            Inventory seoulInventory = inventories.get(0);
+            assertThat(seoulInventory.getHubId()).isEqualTo("HUB-SEOUL");
             assertThat(seoulInventory.getQuantityInHub().getValue()).isEqualTo(50);
 
-            // 나머지 허브는 0으로 생성
-            assertThat(inventories.stream()
-                    .filter(inv -> !inv.getHubId().equals("HUB-SEOUL"))
-                    .allMatch(inv -> inv.getQuantityInHub().getValue() == 0)
-            ).isTrue();
+            // 새로운 InventoryCreatedEvent는 발행되지 않음 (이미 존재하므로)
+            verify(kafkaTemplate, never()).send(any(), any(), any(InventoryCreatedEvent.class));
+            verify(acknowledgment).acknowledge();
+        }
+
+        @Test
+        @DisplayName("여러 허브에서 동일 상품 생성 시 각각 재고 생성")
+        void productCreated_MultipleHubs_CreatesMultipleInventories() {
+            // given & when - 서울 허브
+            ProductCreatedEvent seoulEvent = ProductCreatedEvent.builder()
+                    .eventId("event-seoul")
+                    .hubId("HUB-SEOUL")
+                    .eventType("PRODUCT_CREATED")
+                    .productId(TEST_PRODUCT_ID)
+                    .sellerId(TEST_SELLER_ID)
+                    .name("통합 테스트 상품")
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            productEventConsumer.handleProductCreatedEvent(seoulEvent, 0, 100L, acknowledgment);
+
+            // when - 부산 허브
+            ProductCreatedEvent busanEvent = ProductCreatedEvent.builder()
+                    .eventId("event-busan")
+                    .hubId("HUB-BUSAN")
+                    .eventType("PRODUCT_CREATED")
+                    .productId(TEST_PRODUCT_ID)
+                    .sellerId(TEST_SELLER_ID)
+                    .name("통합 테스트 상품")
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            productEventConsumer.handleProductCreatedEvent(busanEvent, 0, 101L, acknowledgment);
+
+            // then
+            List<Inventory> inventories = inventoryRepository.findByProductId(TEST_PRODUCT_ID);
+            assertThat(inventories).hasSize(2); // 2개 허브에 생성
+            assertThat(inventories)
+                    .extracting(Inventory::getHubId)
+                    .containsExactlyInAnyOrder("HUB-SEOUL", "HUB-BUSAN");
+
+            verify(kafkaTemplate, times(2)).send(any(), eq(TEST_PRODUCT_ID), any(InventoryCreatedEvent.class));
+            verify(acknowledgment, times(2)).acknowledge();
         }
     }
 
@@ -170,10 +208,10 @@ class InventoryEventFlowIntegrationTest {
         }
 
         @Test
-        @DisplayName("재고 예약 후 안전재고 이하면 LowStockEvent 발행")
-        void reserve_PublishesLowStockEvent() {
+        @DisplayName("재고 예약 후 출고 확정하면 안전재고 이하일 때 LowStockEvent 발행")
+        void reserve_AndConfirmShipment_PublishesLowStockEvent() {
             // given
-            int reserveQuantity = 91; // 예약 후 9개 남음 (안전재고 10 이하)
+            int reserveQuantity = 91; // 출고 후 9개 남음 (안전재고 10 이하)
             String orderId = "ORDER-001";
 
             ReservationCommand command = ReservationCommand.builder()
@@ -187,34 +225,46 @@ class InventoryEventFlowIntegrationTest {
                     ))
                     .build();
 
-            // when
+            // when - 예약
             ReservationInfo result = inventoryService.reserveStock(command);
-
-            // then
             assertThat(result.isAllSuccess()).isTrue();
+
+            // then - 예약 시점에는 LowStockEvent 발행되지 않음 (quantityInHub가 여전히 100)
+            verify(kafkaTemplate, never()).send(any(), any(), any(InventoryLowStockEvent.class));
+
+            // when - 출고 확정 (실제 재고 감소)
+            inventoryService.confirmShipment(TEST_PRODUCT_ID, "HUB-SEOUL", reserveQuantity, orderId);
+
+            // then - 출고 확정 후 LowStockEvent 발행됨 (quantityInHub가 9로 감소)
             verify(kafkaTemplate).send(any(), eq(TEST_PRODUCT_ID), any(InventoryLowStockEvent.class));
         }
 
         @Test
         @DisplayName("출고 확정 후 안전재고 이하면 LowStockEvent 발행")
         void confirmShipment_PublishesLowStockEvent() {
-            // given
+            // given - 먼저 예약
             testInventory.reserve(92);
             testInventory = inventoryRepository.save(testInventory);
             String orderId = "ORDER-002";
 
-            // when
-            inventoryService.confirmShipment(TEST_PRODUCT_ID, "HUB-SEOUL", 92, orderId); // 출고 후 8개 남음
+            // when - 출고 확정 (출고 후 8개 남음)
+            inventoryService.confirmShipment(TEST_PRODUCT_ID, "HUB-SEOUL", 92, orderId);
 
-            // then
+            // then - LowStockEvent 발행 확인
             verify(kafkaTemplate).send(any(), eq(TEST_PRODUCT_ID), any(InventoryLowStockEvent.class));
+
+            // 재고 확인
+            Inventory updatedInventory = inventoryRepository.findByProductIdAndHubId(TEST_PRODUCT_ID, "HUB-SEOUL")
+                    .orElseThrow();
+            assertThat(updatedInventory.getQuantityInHub().getValue()).isEqualTo(8);
+            assertThat(updatedInventory.getReservedQuantity().getValue()).isEqualTo(0);
         }
 
         @Test
-        @DisplayName("안전재고 초과 시 LowStockEvent 발행하지 않음")
-        void reserve_DoesNotPublishLowStockEvent() {
+        @DisplayName("예약 + 출고 후에도 안전재고 초과 시 LowStockEvent 발행하지 않음")
+        void reserve_AndConfirmShipment_DoesNotPublishLowStockEvent() {
             // given
-            int reserveQuantity = 50; // 예약 후 50개 남음 (안전재고 10 초과)
+            int reserveQuantity = 50; // 출고 후 50개 남음 (안전재고 10 초과)
             String orderId = "ORDER-003";
 
             ReservationCommand command = ReservationCommand.builder()
@@ -228,11 +278,17 @@ class InventoryEventFlowIntegrationTest {
                     ))
                     .build();
 
-            // when
+            // when - 예약 및 출고 확정
             inventoryService.reserveStock(command);
+            inventoryService.confirmShipment(TEST_PRODUCT_ID, "HUB-SEOUL", reserveQuantity, orderId);
 
-            // then
+            // then - LowStockEvent 발행되지 않음
             verify(kafkaTemplate, never()).send(any(), any(), any(InventoryLowStockEvent.class));
+
+            // 재고 확인
+            Inventory updatedInventory = inventoryRepository.findByProductIdAndHubId(TEST_PRODUCT_ID, "HUB-SEOUL")
+                    .orElseThrow();
+            assertThat(updatedInventory.getQuantityInHub().getValue()).isEqualTo(50);
         }
     }
 
@@ -325,6 +381,7 @@ class InventoryEventFlowIntegrationTest {
             // 1. 상품 생성 이벤트 수신
             ProductCreatedEvent productEvent = ProductCreatedEvent.builder()
                     .eventId("event-full-001")
+                    .hubId("HUB-SEOUL")
                     .eventType("PRODUCT_CREATED")
                     .productId(TEST_PRODUCT_ID)
                     .sellerId(TEST_SELLER_ID)
@@ -335,12 +392,9 @@ class InventoryEventFlowIntegrationTest {
             productEventConsumer.handleProductCreatedEvent(productEvent, 0, 100L, acknowledgment);
 
             // 초기 재고 확인
-            List<Inventory> inventories = inventoryRepository.findByProductId(TEST_PRODUCT_ID);
-            assertThat(inventories).hasSize(4);
-            Inventory seoulInventory = inventories.stream()
-                    .filter(inv -> inv.getHubId().equals("HUB-SEOUL"))
-                    .findFirst()
+            Inventory seoulInventory = inventoryRepository.findByProductIdAndHubId(TEST_PRODUCT_ID, "HUB-SEOUL")
                     .orElseThrow();
+            assertThat(seoulInventory.getQuantityInHub().getValue()).isEqualTo(0);
 
             // 2. 재입고
             RestockCommand restockCommand = RestockCommand.builder()
@@ -381,7 +435,7 @@ class InventoryEventFlowIntegrationTest {
             assertThat(afterShipment.getReservedQuantity().getValue()).isEqualTo(0);
 
             // 5. 대량 출고로 안전재고 이하 만들기
-            ReservationCommand largereserveCommand = ReservationCommand.builder()
+            ReservationCommand largeReserveCommand = ReservationCommand.builder()
                     .orderId("ORDER-002")
                     .items(List.of(
                             ReservationCommand.ReservationItem.builder()
@@ -392,7 +446,7 @@ class InventoryEventFlowIntegrationTest {
                     ))
                     .build();
 
-            inventoryService.reserveStock(largereserveCommand);
+            inventoryService.reserveStock(largeReserveCommand);
             inventoryService.confirmShipment(TEST_PRODUCT_ID, "HUB-SEOUL", 45, "ORDER-002");
 
             // LowStockEvent 발행 확인
@@ -402,19 +456,24 @@ class InventoryEventFlowIntegrationTest {
         @Test
         @DisplayName("여러 허브에서 동시에 재고 부족 발생 시 각각 이벤트 발행")
         void multipleHubs_LowStock() {
-            // given - 모든 허브 초기 재고 생성
-            ProductCreatedEvent event = ProductCreatedEvent.builder()
-                    .eventId("event-multi-001")
-                    .eventType("PRODUCT_CREATED")
-                    .productId(TEST_PRODUCT_ID)
-                    .sellerId(TEST_SELLER_ID)
-                    .name("멀티 허브 테스트")
-                    .createdAt(LocalDateTime.now())
-                    .build();
+            // given - 여러 허브에 재고 생성
+            List<String> hubIds = List.of("HUB-SEOUL", "HUB-BUSAN", "HUB-INCHEON", "HUB-DAEGU");
 
-            productEventConsumer.handleProductCreatedEvent(event, 0, 100L, acknowledgment);
+            for (String hubId : hubIds) {
+                ProductCreatedEvent event = ProductCreatedEvent.builder()
+                        .eventId("event-" + hubId)
+                        .hubId(hubId)
+                        .eventType("PRODUCT_CREATED")
+                        .productId(TEST_PRODUCT_ID)
+                        .sellerId(TEST_SELLER_ID)
+                        .name("멀티 허브 테스트")
+                        .createdAt(LocalDateTime.now())
+                        .build();
+                productEventConsumer.handleProductCreatedEvent(event, 0, 100L, acknowledgment);
+            }
 
             List<Inventory> inventories = inventoryRepository.findByProductId(TEST_PRODUCT_ID);
+            assertThat(inventories).hasSize(4);
 
             // when - 각 허브 재입고 후 대량 출고
             for (Inventory inventory : inventories) {
