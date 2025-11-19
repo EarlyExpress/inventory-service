@@ -22,4 +22,20 @@ public interface InventoryEventPublisher {
      * 재입고 이벤트 발행
      */
     void publishInventoryRestocked(Inventory inventory, Integer restockedQuantity);
+
+    /**
+     * 재고 예약 이벤트 발행 (→ Order)
+     */
+    void publishInventoryReserved(Inventory inventory, String orderId, Integer reservedQuantity);
+
+    /**
+     * 재고 차감 이벤트 발행 (→ Order)
+     */
+    void publishStockDecreased(Inventory inventory, String orderId, Integer decreasedQuantity);
+
+    /**
+     * 재고 복원 이벤트 발행 (→ Order)
+     */
+    void publishStockRestored(Inventory inventory, String orderId, Integer restoredQuantity);
+
 }
