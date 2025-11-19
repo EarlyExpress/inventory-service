@@ -2,9 +2,7 @@ package com.early_express.inventory_service.domain.inventory.infrastructure.mess
 
 import com.early_express.inventory_service.domain.inventory.domain.messaging.InventoryEventPublisher;
 import com.early_express.inventory_service.domain.inventory.domain.model.Inventory;
-import com.early_express.inventory_service.domain.inventory.infrastructure.messaging.event.InventoryCreatedEvent;
-import com.early_express.inventory_service.domain.inventory.infrastructure.messaging.event.InventoryLowStockEvent;
-import com.early_express.inventory_service.domain.inventory.infrastructure.messaging.event.InventoryRestockedEvent;
+import com.early_express.inventory_service.domain.inventory.infrastructure.messaging.event.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -127,6 +125,129 @@ public class InventoryEventProducer implements InventoryEventPublisher {
             } else {
                 log.error("InventoryRestockedEvent 발행 실패: productId={}, error={}",
                         inventory.getProductId(), ex.getMessage(), ex);
+            }
+        });
+    }
+
+    /**
+     * 재고 예약 이벤트 발행 (→ Order)
+     */
+    @Override
+    public void publishInventoryReserved(Inventory inventory, String orderId, Integer reservedQuantity) {
+        String topic = applicationName + EVENTS_TOPIC_SUFFIX;
+
+        InventoryReservedEvent event = InventoryReservedEvent.of(
+                inventory.getInventoryId(),
+                inventory.getProductId(),
+                inventory.getHubId(),
+                orderId,
+                reservedQuantity,
+                inventory.getAvailableQuantity().getValue()
+        );
+
+        CompletableFuture<SendResult<String, Object>> future =
+                kafkaTemplate.send(topic, orderId, event); // orderId를 키로 사용
+
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                log.info("InventoryReservedEvent 발행 성공: orderId={}, productId={}, reservedQuantity={}, partition={}, offset={}",
+                        orderId,
+                        inventory.getProductId(),
+                        reservedQuantity,
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            } else {
+                log.error("InventoryReservedEvent 발행 실패: orderId={}, error={}",
+                        orderId, ex.getMessage(), ex);
+            }
+        });
+    }
+
+    /**
+     * 재고 차감 이벤트 발행 (→ Order)
+     */
+    @Override
+    public void publishStockDecreased(Inventory inventory, String orderId, Integer decreasedQuantity) {
+        String topic = applicationName + EVENTS_TOPIC_SUFFIX;
+
+        StockDecreasedEvent event = StockDecreasedEvent.of(
+                inventory.getInventoryId(),
+                inventory.getProductId(),
+                inventory.getHubId(),
+                orderId,
+                decreasedQuantity,
+                inventory.getQuantityInHub().getValue()
+        );
+
+        CompletableFuture<SendResult<String, Object>> future =
+                kafkaTemplate.send(topic, orderId, event); // orderId를 키로 사용
+
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                log.info("StockDecreasedEvent 발행 성공: orderId={}, productId={}, decreasedQuantity={}, partition={}, offset={}",
+                        orderId,
+                        inventory.getProductId(),
+                        decreasedQuantity,
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            } else {
+                log.error("StockDecreasedEvent 발행 실패: orderId={}, error={}",
+                        orderId, ex.getMessage(), ex);
+            }
+        });
+    }
+
+    /**
+     * 재고 복원 이벤트 발행 (→ Order)
+     */
+    @Override
+    public void publishStockRestored(Inventory inventory, String orderId, Integer restoredQuantity) {
+        String topic = applicationName + EVENTS_TOPIC_SUFFIX;
+
+        StockRestoredEvent event = StockRestoredEvent.of(
+                inventory.getInventoryId(),
+                inventory.getProductId(),
+                inventory.getHubId(),
+                orderId,
+                restoredQuantity,
+                inventory.getQuantityInHub().getValue()
+        );
+
+        CompletableFuture<SendResult<String, Object>> future =
+                kafkaTemplate.send(topic, orderId, event); // orderId를 키로 사용
+
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                log.info("StockRestoredEvent 발행 성공: orderId={}, productId={}, restoredQuantity={}, partition={}, offset={}",
+                        orderId,
+                        inventory.getProductId(),
+                        restoredQuantity,
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            } else {
+                log.error("StockRestoredEvent 발행 실패: orderId={}, error={}",
+                        orderId, ex.getMessage(), ex);
+            }
+        });
+    }
+
+    /**
+     * 공통 이벤트 발행 헬퍼 메서드
+     */
+    private void publishEvent(String topic, String key, Object event, String eventName) {
+        CompletableFuture<SendResult<String, Object>> future =
+                kafkaTemplate.send(topic, key, event);
+
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                log.info("{} 발행 성공: key={}, partition={}, offset={}",
+                        eventName,
+                        key,
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            } else {
+                log.error("{} 발행 실패: key={}, error={}",
+                        eventName, key, ex.getMessage(), ex);
             }
         });
     }

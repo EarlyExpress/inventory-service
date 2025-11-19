@@ -26,7 +26,7 @@ public class KafkaConsumerConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
-    @Value("${spring.kafka.consumer.group-id:inventory-service-group}")
+    @Value("${spring.kafka.consumer.group-id:product-service-group}")
     private String groupId;
 
     @Bean
