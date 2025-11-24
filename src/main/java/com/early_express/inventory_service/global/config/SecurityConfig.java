@@ -1,5 +1,6 @@
 package com.early_express.inventory_service.global.config;
 
+import com.early_express.inventory_service.global.infrastructure.config.UserHeaderAuthenticationFilter;
 import com.early_express.inventory_service.global.infrastructure.security.LoginFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,13 +34,14 @@ public class SecurityConfig {
      * 현재는 모든 요청을 허용하도록 설정 (개발 초기 단계)
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LoginFilter loginFilter) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, LoginFilter loginFilter, UserHeaderAuthenticationFilter userHeaderAuthenticationFilter) throws Exception {
         http
                 // CSRF 비활성화 (REST API이므로)
                 .csrf(AbstractHttpConfigurer::disable)
 
                 // CORS 설정
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .addFilterBefore(userHeaderAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(loginFilter, UsernamePasswordAuthenticationFilter.class)
                 // H2 Console을 위한 Headers 설정 추가
                 .headers(headers -> headers
