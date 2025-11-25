@@ -1,5 +1,6 @@
 package com.early_express.inventory_service.global.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -29,8 +30,8 @@ public class KafkaConfig {
     private String bootstrapServers;
 
     @Bean
-    public RecordMessageConverter converter() {
-        return new StringJsonMessageConverter();
+    public RecordMessageConverter converter(ObjectMapper objectMapper) {
+        return new StringJsonMessageConverter(objectMapper);
     }
 
     @Bean

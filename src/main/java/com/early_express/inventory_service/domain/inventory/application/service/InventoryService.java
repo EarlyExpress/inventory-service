@@ -5,10 +5,10 @@ import com.early_express.inventory_service.domain.inventory.application.dto.resu
 import com.early_express.inventory_service.domain.inventory.domain.exception.InventoryErrorCode;
 import com.early_express.inventory_service.domain.inventory.domain.exception.InventoryException;
 import com.early_express.inventory_service.domain.inventory.domain.messaging.InventoryEventPublisher;
+import com.early_express.inventory_service.domain.inventory.domain.messaging.dto.*;
 import com.early_express.inventory_service.domain.inventory.domain.model.Inventory;
 import com.early_express.inventory_service.domain.inventory.domain.model.vo.StockQuantity;
 import com.early_express.inventory_service.domain.inventory.domain.repository.InventoryRepository;
-import com.early_express.inventory_service.domain.inventory.infrastructure.messaging.producer.InventoryEventProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -20,9 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
 /**
- * Inventory Application Service (최종 개선 버전)
+ * Inventory Application Service
  * - Application Layer DTO 사용
- * - Presentation Layer와 완전히 독립
+ * - EventData 패턴으로 이벤트 발행
  */
 @Slf4j
 @Service
@@ -31,14 +31,11 @@ import java.util.*;
 public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
-
     private final InventoryEventPublisher eventPublisher;
-
 
     private static final List<String> AVAILABLE_HUBS = Arrays.asList(
             "HUB-SEOUL", "HUB-BUSAN", "HUB-INCHEON", "HUB-DAEGU"
     );
-
 
     // ==================== 명령(Command) 메서드 ====================
 
@@ -57,14 +54,18 @@ public class InventoryService {
 
         Inventory inventory = Inventory.create(null, productId, hubId, 0, 10, "A-1-1");
         Inventory savedInventory = inventoryRepository.save(inventory);
-        eventPublisher.publishInventoryCreated(savedInventory);
+
+        // 이벤트 발행 (EventData 사용)
+        publishInventoryCreatedEvent(savedInventory);
 
         log.info("초기 재고 생성 완료: inventoryId={}", savedInventory.getInventoryId());
 
         return savedInventory;
     }
 
-    // 기존 메서드는 유지 (다른 용도로 사용될 수 있음)
+    /**
+     * 모든 허브에 초기 재고 생성
+     */
     @Transactional
     public List<Inventory> createInitialInventories(String productId) {
         log.info("모든 허브에 초기 재고 생성 시작: productId={}", productId);
@@ -72,17 +73,17 @@ public class InventoryService {
         List<Inventory> createdInventories = new ArrayList<>();
 
         for (String hubId : AVAILABLE_HUBS) {
-
             if (inventoryRepository.existsByProductIdAndHubId(productId, hubId)) {
                 log.info("재고가 이미 존재함: productId={}, hubId={}", productId, hubId);
                 continue;
             }
 
-
             Inventory inventory = Inventory.create(null, productId, hubId, 0, 10, "A-1-1");
             Inventory savedInventory = inventoryRepository.save(inventory);
             createdInventories.add(savedInventory);
-            eventPublisher.publishInventoryCreated(savedInventory);
+
+            // 이벤트 발행 (EventData 사용)
+            publishInventoryCreatedEvent(savedInventory);
 
             log.info("초기 재고 생성 완료: inventoryId={}", savedInventory.getInventoryId());
         }
@@ -101,7 +102,6 @@ public class InventoryService {
         inventories.forEach(inv -> inventoryRepository.delete(inv.getInventoryId()));
 
         log.info("상품 재고 삭제 완료: productId={}, 삭제 개수={}", productId, inventories.size());
-
     }
 
     /**
@@ -118,7 +118,15 @@ public class InventoryService {
         inventory.restock(command.getQuantity());
         Inventory savedInventory = inventoryRepository.save(inventory);
 
-        eventPublisher.publishInventoryRestocked(savedInventory, command.getQuantity());
+        // 이벤트 발행 (EventData 사용)
+        InventoryRestockedEventData eventData = InventoryRestockedEventData.of(
+                savedInventory.getInventoryId(),
+                savedInventory.getProductId(),
+                savedInventory.getHubId(),
+                command.getQuantity(),
+                savedInventory.getQuantityInHub().getValue()
+        );
+        eventPublisher.publishInventoryRestocked(eventData);
 
         log.info("재입고 완료: inventoryId={}, 이전={}, 현재={}",
                 savedInventory.getInventoryId(), previousQuantity, savedInventory.getQuantityInHub().getValue());
@@ -142,7 +150,18 @@ public class InventoryService {
                 inventory.reserve(item.getQuantity());
                 inventoryRepository.save(inventory);
 
-                eventPublisher.publishInventoryReserved(inventory, command.getOrderId(), item.getQuantity());
+                // 이벤트 발행 (EventData 사용)
+                InventoryReservedEventData eventData = InventoryReservedEventData.of(
+                        inventory.getInventoryId(),
+                        inventory.getProductId(),
+                        inventory.getHubId(),
+                        command.getOrderId(),
+                        item.getQuantity(),
+                        inventory.getAvailableQuantity().getValue()
+                );
+                eventPublisher.publishInventoryReserved(eventData);
+
+                // 재고 부족 체크
                 checkAndPublishLowStockEvent(inventory);
 
                 reservedItems.add(ReservationInfo.ReservedItemInfo.builder()
@@ -187,7 +206,16 @@ public class InventoryService {
         inventory.releaseReservation(quantity);
         Inventory savedInventory = inventoryRepository.save(inventory);
 
-        eventPublisher.publishStockRestored(savedInventory, orderId, quantity);
+        // 이벤트 발행 (EventData 사용)
+        StockRestoredEventData eventData = StockRestoredEventData.of(
+                savedInventory.getInventoryId(),
+                savedInventory.getProductId(),
+                savedInventory.getHubId(),
+                orderId,
+                quantity,
+                savedInventory.getQuantityInHub().getValue()
+        );
+        eventPublisher.publishStockRestored(eventData);
 
         log.info("예약 해제 완료: inventoryId={}", savedInventory.getInventoryId());
 
@@ -206,7 +234,18 @@ public class InventoryService {
         inventory.confirmShipment(quantity);
         Inventory savedInventory = inventoryRepository.save(inventory);
 
-        eventPublisher.publishStockDecreased(savedInventory, orderId, quantity);
+        // 이벤트 발행 (EventData 사용)
+        StockDecreasedEventData eventData = StockDecreasedEventData.of(
+                savedInventory.getInventoryId(),
+                savedInventory.getProductId(),
+                savedInventory.getHubId(),
+                orderId,
+                quantity,
+                savedInventory.getQuantityInHub().getValue()
+        );
+        eventPublisher.publishStockDecreased(eventData);
+
+        // 재고 부족 체크
         checkAndPublishLowStockEvent(savedInventory);
 
         log.info("출고 확정 완료: inventoryId={}", savedInventory.getInventoryId());
@@ -374,11 +413,34 @@ public class InventoryService {
                 .orElseThrow(() -> new InventoryException(InventoryErrorCode.INVENTORY_NOT_FOUND));
     }
 
+    /**
+     * 재고 생성 이벤트 발행 헬퍼
+     */
+    private void publishInventoryCreatedEvent(Inventory inventory) {
+        InventoryCreatedEventData eventData = InventoryCreatedEventData.of(
+                inventory.getInventoryId(),
+                inventory.getProductId(),
+                inventory.getHubId(),
+                inventory.getQuantityInHub().getValue()
+        );
+        eventPublisher.publishInventoryCreated(eventData);
+    }
+
+    /**
+     * 재고 부족 이벤트 체크 및 발행 헬퍼
+     */
     private void checkAndPublishLowStockEvent(Inventory inventory) {
         if (inventory.isBelowSafetyStock()) {
             log.warn("안전 재고 이하 감지: inventoryId={}", inventory.getInventoryId());
-            eventPublisher.publishInventoryLowStock(inventory);
+
+            InventoryLowStockEventData eventData = InventoryLowStockEventData.of(
+                    inventory.getInventoryId(),
+                    inventory.getProductId(),
+                    inventory.getHubId(),
+                    inventory.getQuantityInHub().getValue(),
+                    inventory.getSafetyStock().getValue()
+            );
+            eventPublisher.publishInventoryLowStock(eventData);
         }
     }
 }
-
