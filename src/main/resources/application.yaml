@@ -63,6 +63,20 @@ spring:
       ack-mode: manual  # 수동 승인 모드 (메시지 처리 보장)
       concurrency: 3  # 동시 처리 리스너 수
 
+    # ===== 토픽 설정 =====
+    topic:
+      # 발행 토픽 (Inventory → Product)
+      inventory-created: inventory-created
+      inventory-low-stock: inventory-low-stock
+      inventory-restocked: inventory-restocked
+      # 발행 토픽 (Inventory → Order)
+      inventory-reserved: inventory-reserved
+      stock-decreased: stock-decreased
+      stock-restored: stock-restored
+      # 구독 토픽 (Product → Inventory)
+      product-created: product-created
+      product-deleted: product-deleted
+
 # ===== 서버 포트 설정 =====
 server:
   port: ${APP_PORT:4000}  # 서비스 포트 (환경변수로 오버라이드 가능)
