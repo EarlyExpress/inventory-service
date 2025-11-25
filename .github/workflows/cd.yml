@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: earlyexpress/inventory-server
+  IMAGE_NAME: earlyexpress/inventory-service
   VERSION: latest
 
 jobs:
