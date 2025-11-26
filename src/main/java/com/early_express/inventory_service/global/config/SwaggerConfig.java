@@ -19,16 +19,13 @@ public class SwaggerConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Default Server API Documentation")
-                        .description("Early Express Default Server REST API")
+                        .title("Inventory Server API Documentation")
+                        .description("Early Express Inventory Server REST API")
                         .version("1.0.0")
                         .contact(new Contact()
                                 .name("Early Express Team")
                                 .email("dev@early-express.com")))
                 .servers(List.of(
-                        new Server()
-                                .url("http://localhost:4000")
-                                .description("로컬 개발 서버 (프록시)"),
                         new Server()
                                 .url("/")
                                 .description("현재 서버 (상대 경로)")
