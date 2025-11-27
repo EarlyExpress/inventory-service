@@ -136,6 +136,7 @@ public class InventoryService {
 
     /**
      * 재고 예약
+     * - hubId가 null이면 재고 있는 허브 자동 탐색
      */
     @Transactional
     public ReservationInfo reserveStock(ReservationCommand command) {
@@ -146,11 +147,18 @@ public class InventoryService {
 
         for (ReservationCommand.ReservationItem item : command.getItems()) {
             try {
-                Inventory inventory = getInventoryByProductAndHub(item.getProductId(), item.getHubId());
+                String hubId = item.getHubId();
+
+                // hubId가 없으면 재고 있는 허브 자동 탐색
+                if (hubId == null || hubId.isBlank()) {
+                    hubId = findHubWithAvailableStock(item.getProductId(), item.getQuantity());
+                }
+
+                Inventory inventory = getInventoryByProductAndHub(item.getProductId(), hubId);
                 inventory.reserve(item.getQuantity());
                 inventoryRepository.save(inventory);
 
-                // 이벤트 발행 (EventData 사용)
+                // 이벤트 발행
                 InventoryReservedEventData eventData = InventoryReservedEventData.of(
                         inventory.getInventoryId(),
                         inventory.getProductId(),
@@ -161,12 +169,11 @@ public class InventoryService {
                 );
                 eventPublisher.publishInventoryReserved(eventData);
 
-                // 재고 부족 체크
                 checkAndPublishLowStockEvent(inventory);
 
                 reservedItems.add(ReservationInfo.ReservedItemInfo.builder()
                         .productId(item.getProductId())
-                        .hubId(item.getHubId())
+                        .hubId(hubId)  // 실제 예약된 허브 ID 반환
                         .quantity(item.getQuantity())
                         .success(true)
                         .build());
@@ -192,6 +199,28 @@ public class InventoryService {
                 .allSuccess(allSuccess)
                 .reservedItems(reservedItems)
                 .build();
+    }
+
+    /**
+     * 재고가 있는 허브 자동 탐색
+     */
+    private String findHubWithAvailableStock(String productId, Integer requiredQuantity) {
+        log.info("재고 있는 허브 탐색: productId={}, requiredQuantity={}", productId, requiredQuantity);
+
+        List<Inventory> inventories = inventoryRepository.findByProductId(productId);
+
+        for (Inventory inventory : inventories) {
+            if (inventory.getAvailableQuantity().getValue() >= requiredQuantity) {
+                log.info("재고 있는 허브 발견: hubId={}, available={}",
+                        inventory.getHubId(), inventory.getAvailableQuantity().getValue());
+                return inventory.getHubId();
+            }
+        }
+
+        throw new InventoryException(
+                InventoryErrorCode.INSUFFICIENT_STOCK,
+                String.format("재고가 충분한 허브를 찾을 수 없습니다. productId=%s, required=%d", productId, requiredQuantity)
+        );
     }
 
     /**

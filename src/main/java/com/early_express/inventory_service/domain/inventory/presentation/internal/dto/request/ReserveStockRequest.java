@@ -54,7 +54,7 @@ public class ReserveStockRequest {
         @NotBlank(message = "상품 ID는 필수입니다.")
         private String productId;
 
-        @NotBlank(message = "허브 ID는 필수입니다.")
+//        @NotBlank(message = "허브 ID는 필수입니다.")
         private String hubId;
 
         @NotNull(message = "수량은 필수입니다.")
